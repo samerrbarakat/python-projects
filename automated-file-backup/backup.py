@@ -9,19 +9,24 @@ from PyQt5.QtWidgets import QApplication, QMessageBox,QDesktopWidget,QHBoxLayout
 from PyQt5.QtCore import Qt
 import PyQt5.QtGui as qtg
 from PyQt5.QtGui import QPixmap,QPalette,QBrush
+from PyQt5.QtCore import Qt, pyqtSignal, QObject
 
-def copy_folder_to_direcory(source,dest):
-        today = datetime.date.today() ; 
-        dest_dir = os.path.join(dest,str(today))
-        try:
-            shutil.copytree(source,dest_dir)
-            print(f"Folder copied to: {dest_dir}")
-            QMessageBox.warning(window, "Backup successful",f"Folder copied to: {dest_dir}" , QMessageBox.Ok)
+class BackupSignals(QObject):
+    message_signal = pyqtSignal(str, str)  # (title, message)
 
-        except FileExistsError:
-            print(f"Folder already exists in: {dest}")
-            QMessageBox.warning(window, "Backup failed",f"Folder already exists in: {dest}" , QMessageBox.Ok)
+signals = BackupSignals()
 
+def copy_folder_to_directory(source, dest):
+    today = datetime.date.today() 
+    dest_dir = os.path.join(dest, str(today))
+    try:
+        shutil.copytree(source, dest_dir)
+        signals.message_signal.emit("Backup successful", f"Folder copied to: {dest_dir}")
+    except FileExistsError:
+        signals.message_signal.emit("Backup failed", f"Folder already exists in: {dest}")
+    except Exception as e:
+        signals.message_signal.emit("Backup Error", str(e))
+    
 def launch_backup():
     global source_dir, destination_dir, timeb
     source_dir = source.text()
@@ -32,7 +37,7 @@ def launch_backup():
         return
 
     def schedule_thread():
-        schedule.every().day.at(t_string).do(lambda: copy_folder_to_direcory(source_dir, destination_dir))
+        schedule.every().day.at(t_string).do(lambda: copy_folder_to_directory(source_dir, destination_dir))
         while True:
             schedule.run_pending()
             time.sleep(60)
@@ -45,9 +50,8 @@ destination_dir = r""
 timeb =""
 app = QApplication(sys.argv)
 window = QWidget()
-pixmap = QPixmap("./guiwallpaper.jpg")
+pixmap = QPixmap("guiwallpaper.jpg")
 window.setWindowTitle("Automated-file-backup")
-
 center_point = QDesktopWidget().availableGeometry().center()
 n=1
 image_size = (736//n,488//n)
@@ -161,9 +165,15 @@ Final_layout = QHBoxLayout()
 Final_layout.addStretch(1)
 Final_layout.addLayout(form_layout)
 Final_layout.addStretch(1)
-launch.clicked.connect(launch_backup)
 
 window.setLayout(Final_layout)
+def show_message(title, message):
+    if "success" in title.lower():
+        QMessageBox.information(window, title, message, QMessageBox.Ok)
+    else:
+        QMessageBox.warning(window, title, message, QMessageBox.Ok)
 
+signals.message_signal.connect(show_message)
+launch.clicked.connect(launch_backup)
 window.show()
 sys.exit(app.exec_())
